@@ -42,6 +42,28 @@ def _json_schema(_: argparse.Namespace) -> int:
     return 0
 
 
+def _serve(args: argparse.Namespace) -> int:
+    import os
+
+    from .runtime.toolset import ENV_ARTIFACT, toolset_from_env
+
+    if args.artifact:
+        os.environ[ENV_ARTIFACT] = str(args.artifact)
+    try:
+        from .runtime import mcp_server
+    except ImportError:
+        print("error: serving over MCP needs the 'mcp' extra: pip install 'dbt-toolset[mcp]'", file=sys.stderr)
+        return 1
+    toolset = toolset_from_env()
+    if args.transport == "http":
+        mcp_server.run_http(toolset, args.host, args.port)
+    else:
+        import asyncio
+
+        asyncio.run(mcp_server.run_stdio(toolset))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="dbt-toolset")
     sub = p.add_subparsers(required=True)
@@ -57,6 +79,13 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("json-schema", help="print the JSON Schema of the artifact format")
     s.set_defaults(fn=_json_schema)
+
+    m = sub.add_parser("serve", help="serve the tools as an MCP server (Redshift settings from DBT_TOOLSET_* env)")
+    m.add_argument("--artifact", type=Path, help="toolset.json; defaults to $DBT_TOOLSET_ARTIFACT or ./toolset.json")
+    m.add_argument("--transport", choices=["stdio", "http"], default="stdio")
+    m.add_argument("--host", default="127.0.0.1")
+    m.add_argument("--port", type=int, default=8000)
+    m.set_defaults(fn=_serve)
 
     args = p.parse_args(argv)
     return args.fn(args)
