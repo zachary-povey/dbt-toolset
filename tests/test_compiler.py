@@ -5,17 +5,12 @@ import pytest
 
 from dbt_toolset.artifact import Artifact, ColumnType
 from dbt_toolset.cli import main
-from dbt_toolset.compiler import CompileError, build_artifact, compile_project, logical_type
+from dbt_toolset.compiler import CompileError, build_artifact, logical_type
 from dbt_toolset.config import CompileConfig
 from dbt_toolset.schema import tool_definitions, tool_input_schema
 
 PROJECT = Path(__file__).parent / "fixtures" / "sample_project"
 REPO = Path(__file__).parent.parent
-
-
-@pytest.fixture(scope="module")
-def artifact() -> Artifact:
-    return compile_project(PROJECT, CompileConfig.load(PROJECT / "toolset.yml"), profiles_dir=PROJECT)
 
 
 def test_selector_limits_exposed_models(artifact):
@@ -137,7 +132,8 @@ def test_gateway_schema_uses_only_supported_keywords(artifact):
 
     for definition in tool_definitions(artifact, "gateway"):
         walk(definition["inputSchema"])
-        assert "order_id" in json.dumps(definition) or definition["name"] != "orders"
+    orders = next(d for d in tool_definitions(artifact, "gateway") if d["name"] == "orders")
+    assert "order_id" in orders["inputSchema"]["properties"]["columns"]["items"]["description"]
 
 
 def test_cli_writes_both_outputs(tmp_path, capsys):
