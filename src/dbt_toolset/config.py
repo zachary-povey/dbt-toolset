@@ -20,22 +20,32 @@ class Limits(BaseModel):
         return self
 
 
-class CompileConfig(BaseModel):
+class Selection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     select: str | None = Field(None, description="dbt node selection, e.g. 'tag:exposed'.")
     exclude: str | None = None
     selector: str | None = Field(None, description="Name of a YAML selector in selectors.yml.")
-    tool_name_prefix: str = ""
-    limits: Limits = Limits()
 
     @model_validator(mode="after")
-    def _one_selection(self) -> "CompileConfig":
+    def _one_selection(self) -> "Selection":
         if self.selector and (self.select or self.exclude):
             raise ValueError("use either 'selector' or 'select'/'exclude', not both")
         if not (self.selector or self.select):
             raise ValueError("a 'select' or 'selector' is required: nothing is exposed by default")
         return self
+
+
+class MetricsConfig(Selection):
+    tool_name_prefix: str = ""
+
+
+class CompileConfig(Selection):
+    """Top-level select/exclude/selector choose the models; `metrics` chooses metrics."""
+
+    tool_name_prefix: str = ""
+    limits: Limits = Limits()
+    metrics: MetricsConfig | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> "CompileConfig":

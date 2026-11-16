@@ -33,7 +33,10 @@ def _compile(args: argparse.Namespace) -> int:
     (args.out / GATEWAY_FILE).write_text(json.dumps(tool_definitions(artifact, "gateway"), indent=2) + "\n")
     print(f"compiled {len(artifact.tools)} tool(s) to {args.out}:")
     for t in artifact.tools:
-        print(f"  {t.name}  ->  {t.relation.schema_}.{t.relation.identifier}  ({len(t.columns)} columns)")
+        if t.kind == "model":
+            print(f"  {t.name}  ->  model {t.relation.schema_}.{t.relation.identifier}  ({len(t.columns)} columns)")
+        else:
+            print(f"  {t.name}  ->  metric {t.metric}  ({len(t.dimensions)} dimensions)")
     return 0
 
 

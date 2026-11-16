@@ -33,7 +33,15 @@ models:
     columns:
       - name: customer_id
         data_type: integer
+      - name: region
+        data_type: varchar
       - name: order_count
         data_type: bigint
   - name: secret
     description: Not tagged, so never exposed.
+  - name: metricflow_time_spine
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day

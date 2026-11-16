@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..artifact import Artifact
+from ..artifact import Artifact, MetricTool
 from ..schema import Flavor, tool_definitions
 from .executor import Executor
 from .query import ToolInputError, parse_request
@@ -20,10 +20,27 @@ class UnknownToolError(ToolInputError):
 
 
 class Toolset:
-    def __init__(self, artifact: Artifact, executor: Executor, connection_database: str | None = None) -> None:
+    def __init__(
+        self,
+        artifact: Artifact,
+        executor: Executor,
+        connection_database: str | None = None,
+        metric_dialect: str = "redshift",
+    ) -> None:
         self.artifact = artifact
         self._executor = executor
         self._database = (connection_database or "").lower()
+        self._metric_dialect = metric_dialect
+        self._engine: Any = None
+
+    def _metricflow(self) -> Any:
+        if self._engine is None:  # built on first metric call; model tools never pay for it
+            from ..metricflow_engine import build_engine
+
+            if not self.artifact.semantic_manifest:
+                raise RuntimeError("the artifact has metric tools but no semantic manifest; recompile it")
+            self._engine = build_engine(self.artifact.semantic_manifest, self._metric_dialect)
+        return self._engine
 
     def definitions(self, flavor: Flavor = "mcp") -> list[dict]:
         return tool_definitions(self.artifact, flavor)
@@ -33,10 +50,15 @@ class Toolset:
         tool = self.artifact.tool(name)
         if tool is None:
             raise UnknownToolError(f"unknown tool {name!r}")
-        request = parse_request(tool, arguments)
-        # Name the database only when the model lives outside the one we connect to.
-        cross_db = bool(tool.relation.database) and tool.relation.database.lower() != self._database
-        built = build_query(tool, request, include_database=cross_db and bool(self._database))
+        if isinstance(tool, MetricTool):
+            from .metrics import build_metric_query
+
+            built = build_metric_query(tool, arguments, self._metricflow())
+        else:
+            request = parse_request(tool, arguments)
+            # Name the database only when the model lives outside the one we connect to.
+            cross_db = bool(tool.relation.database) and tool.relation.database.lower() != self._database
+            built = build_query(tool, request, include_database=cross_db and bool(self._database))
         result = self._executor.execute(built.sql, built.parameters)
         rows = result.rows[: built.limit]
         return {

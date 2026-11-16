@@ -641,6 +641,9 @@ mcp = [
     { name = "mcp" },
     { name = "sqlglot" },
 ]
+metrics = [
+    { name = "metricflow" },
+]
 runtime = [
     { name = "boto3" },
     { name = "sqlglot" },
@@ -653,6 +656,7 @@ dev = [
     { name = "dbt-redshift" },
     { name = "duckdb" },
     { name = "mcp" },
+    { name = "metricflow" },
     { name = "pytest" },
     { name = "pyyaml" },
     { name = "sqlglot" },
@@ -664,12 +668,13 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'runtime'", specifier = ">=1.34" },
     { name = "dbt-core", marker = "extra == 'compile'", specifier = ">=1.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2,<3" },
+    { name = "metricflow", marker = "extra == 'metrics'", specifier = ">=0.213,<0.214" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "pyyaml", marker = "extra == 'compile'", specifier = ">=6" },
     { name = "sqlglot", marker = "extra == 'mcp'", specifier = ">=25" },
     { name = "sqlglot", marker = "extra == 'runtime'", specifier = ">=25" },
 ]
-provides-extras = ["compile", "runtime", "mcp"]
+provides-extras = ["compile", "runtime", "mcp", "metrics"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -678,6 +683,7 @@ dev = [
     { name = "dbt-redshift", specifier = ">=1.8" },
     { name = "duckdb", specifier = ">=1" },
     { name = "mcp", specifier = ">=2,<3" },
+    { name = "metricflow", specifier = ">=0.213,<0.214" },
     { name = "pytest", specifier = ">=8" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "sqlglot", specifier = ">=25" },

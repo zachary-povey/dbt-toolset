@@ -50,6 +50,116 @@
       "title": "ColumnType",
       "type": "string"
     },
+    "Dimension": {
+      "additionalProperties": false,
+      "description": "A semantic-layer dimension a metric can be grouped and filtered by.",
+      "properties": {
+        "name": {
+          "description": "Qualified name, e.g. 'customer__region' or 'metric_time'.",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "categorical",
+            "time"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColumnType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Logical type if known; otherwise inferred from filter values."
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "grains": {
+          "description": "Time dimensions: allowed grains, finest first.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Grains",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "title": "Dimension",
+      "type": "object"
+    },
+    "MetricTool": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "metric",
+          "default": "metric",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "unique_id": {
+          "description": "dbt unique_id of the source metric.",
+          "title": "Unique Id",
+          "type": "string"
+        },
+        "metric": {
+          "description": "Metric name in the semantic manifest.",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "title": "Metric",
+          "type": "string"
+        },
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/Dimension"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "default_limit": {
+          "exclusiveMinimum": 0,
+          "title": "Default Limit",
+          "type": "integer"
+        },
+        "max_limit": {
+          "exclusiveMinimum": 0,
+          "title": "Max Limit",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "unique_id",
+        "metric",
+        "dimensions",
+        "default_limit",
+        "max_limit"
+      ],
+      "title": "MetricTool",
+      "type": "object"
+    },
     "ModelTool": {
       "additionalProperties": false,
       "properties": {
@@ -199,10 +309,38 @@
     },
     "tools": {
       "items": {
-        "$ref": "#/$defs/ModelTool"
+        "discriminator": {
+          "mapping": {
+            "metric": "#/$defs/MetricTool",
+            "model": "#/$defs/ModelTool"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ModelTool"
+          },
+          {
+            "$ref": "#/$defs/MetricTool"
+          }
+        ]
       },
       "title": "Tools",
       "type": "array"
+    },
+    "semantic_manifest": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "dbt's semantic_manifest.json, embedded when metric tools are present.",
+      "title": "Semantic Manifest"
     }
   },
   "required": [

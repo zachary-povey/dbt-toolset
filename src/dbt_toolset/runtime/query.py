@@ -116,13 +116,37 @@ def coerce(value: Any, column: Column) -> str:
     raise ToolInputError(f"filter on {column.name!r}: {value!r} is not a valid {t.value}")
 
 
+def validate_filter(f: Filter, c: Column) -> None:
+    """Check a filter against its column and normalise its value(s) to parameter text."""
+    f.value = _maybe_json(f.value) if f.op in ("in", "not_in", "between") else f.value
+    if f.op in ("is_null", "is_not_null"):
+        if f.value is not None:
+            raise ToolInputError(f"filter on {c.name!r}: {f.op} takes no value")
+    elif f.op in ("in", "not_in"):
+        if not isinstance(f.value, list) or not 0 < len(f.value) <= MAX_IN_VALUES:
+            raise ToolInputError(f"filter on {c.name!r}: {f.op} needs a list of 1-{MAX_IN_VALUES} values")
+        f.value = [coerce(v, c) for v in f.value]
+    elif f.op == "between":
+        if not isinstance(f.value, list) or len(f.value) != 2:
+            raise ToolInputError(f"filter on {c.name!r}: between needs a list of two values")
+        f.value = [coerce(v, c) for v in f.value]
+    else:
+        if f.op == "like" and c.type is not ColumnType.string:
+            raise ToolInputError(f"filter on {c.name!r}: like only applies to string columns")
+        f.value = coerce(f.value, c)
+
+
+def validation_message(e: ValidationError) -> str:
+    problems = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())
+    return f"invalid arguments: {problems}"
+
+
 def parse_request(tool: ModelTool, arguments: dict | None) -> QueryRequest:
     """Parse and fully validate a tool call. Raises ToolInputError."""
     try:
         req = QueryRequest.model_validate(arguments or {})
     except ValidationError as e:
-        problems = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())
-        raise ToolInputError(f"invalid arguments: {problems}") from None
+        raise ToolInputError(validation_message(e)) from None
 
     cols = {c.name: c for c in tool.columns}
 
@@ -140,23 +164,7 @@ def parse_request(tool: ModelTool, arguments: dict | None) -> QueryRequest:
         known(name, "columns", usable=False)
 
     for f in req.filters:
-        c = known(f.column, "filtered")
-        f.value = _maybe_json(f.value) if f.op in ("in", "not_in", "between") else f.value
-        if f.op in ("is_null", "is_not_null"):
-            if f.value is not None:
-                raise ToolInputError(f"filter on {c.name!r}: {f.op} takes no value")
-        elif f.op in ("in", "not_in"):
-            if not isinstance(f.value, list) or not 0 < len(f.value) <= MAX_IN_VALUES:
-                raise ToolInputError(f"filter on {c.name!r}: {f.op} needs a list of 1-{MAX_IN_VALUES} values")
-            f.value = [coerce(v, c) for v in f.value]
-        elif f.op == "between":
-            if not isinstance(f.value, list) or len(f.value) != 2:
-                raise ToolInputError(f"filter on {c.name!r}: between needs a list of two values")
-            f.value = [coerce(v, c) for v in f.value]
-        else:
-            if f.op == "like" and c.type is not ColumnType.string:
-                raise ToolInputError(f"filter on {c.name!r}: like only applies to string columns")
-            f.value = coerce(f.value, c)
+        validate_filter(f, known(f.column, "filtered"))
 
     for name in req.group_by:
         known(name, "grouped")

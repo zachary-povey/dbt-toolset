@@ -7,7 +7,7 @@ from the other. Bump SCHEMA_VERSION on any backwards-incompatible change.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,6 +59,31 @@ class ModelTool(_Strict):
     max_limit: int = Field(gt=0)
 
 
+class Dimension(_Strict):
+    """A semantic-layer dimension a metric can be grouped and filtered by."""
+
+    # Constrained because the runtime embeds it in MetricFlow filter templates.
+    name: str = Field(pattern=r"^[A-Za-z0-9_]+$", description="Qualified name, e.g. 'customer__region' or 'metric_time'.")
+    kind: Literal["categorical", "time"]
+    type: ColumnType | None = Field(None, description="Logical type if known; otherwise inferred from filter values.")
+    description: str = ""
+    grains: list[str] = Field(default_factory=list, description="Time dimensions: allowed grains, finest first.")
+
+
+class MetricTool(_Strict):
+    kind: Literal["metric"] = "metric"
+    name: str = Field(pattern=TOOL_NAME_PATTERN)
+    description: str
+    unique_id: str = Field(description="dbt unique_id of the source metric.")
+    metric: str = Field(pattern=r"^[A-Za-z0-9_]+$", description="Metric name in the semantic manifest.")
+    dimensions: list[Dimension]
+    default_limit: int = Field(gt=0)
+    max_limit: int = Field(gt=0)
+
+
+Tool = Annotated[ModelTool | MetricTool, Field(discriminator="kind")]
+
+
 class Source(_Strict):
     project_name: str | None = None
     dbt_version: str | None = None
@@ -69,9 +94,12 @@ class Artifact(_Strict):
     schema_version: Literal["1"] = SCHEMA_VERSION
     generated_at: str
     source: Source
-    tools: list[ModelTool]
+    tools: list[Tool]
+    semantic_manifest: dict[str, Any] | None = Field(
+        None, description="dbt's semantic_manifest.json, embedded when metric tools are present."
+    )
 
-    def tool(self, name: str) -> ModelTool | None:
+    def tool(self, name: str) -> ModelTool | MetricTool | None:
         return next((t for t in self.tools if t.name == name), None)
 
     def to_json(self) -> str:

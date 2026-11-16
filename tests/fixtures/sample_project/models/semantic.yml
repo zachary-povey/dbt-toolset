@@ -1,0 +1,75 @@
+semantic_models:
+  - name: orders
+    model: ref('orders')
+    defaults:
+      agg_time_dimension: ordered_at
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+      - name: customer
+        type: foreign
+        expr: customer_id
+    dimensions:
+      - name: status
+        type: categorical
+        description: placed, shipped or returned.
+      - name: ordered_at
+        type: time
+        type_params:
+          time_granularity: day
+    measures:
+      - name: order_total
+        agg: sum
+        expr: amount
+      - name: order_count
+        agg: count
+        expr: order_id
+      - name: ordering_customers
+        agg: count_distinct
+        expr: customer_id
+  - name: customers
+    model: ref('customers')
+    entities:
+      - name: customer
+        type: primary
+        expr: customer_id
+    dimensions:
+      - name: region
+        type: categorical
+        description: Sales region of the customer.
+
+metrics:
+  - name: revenue
+    label: Revenue
+    description: Total order value in GBP.
+    type: simple
+    type_params:
+      measure: order_total
+  - name: order_count
+    label: Orders
+    description: Number of orders.
+    type: simple
+    type_params:
+      measure: order_count
+  - name: ordering_customers
+    description: Distinct customers who ordered.
+    type: simple
+    type_params:
+      measure: ordering_customers
+  - name: average_order_value
+    description: Revenue divided by number of orders.
+    type: ratio
+    type_params:
+      numerator: revenue
+      denominator: order_count
+  - name: cumulative_revenue
+    description: Running total of revenue.
+    type: cumulative
+    type_params:
+      measure: order_total
+    config:
+      meta:
+        dbt_toolset:
+          tool_name: running_revenue
+          dimensions: [metric_time, order__status]

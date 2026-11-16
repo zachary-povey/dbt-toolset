@@ -14,7 +14,8 @@ REPO = Path(__file__).parent.parent
 
 
 def test_selector_limits_exposed_models(artifact):
-    assert {t.unique_id for t in artifact.tools} == {"model.sample.orders", "model.sample.customers"}
+    models = {t.unique_id for t in artifact.tools if t.kind == "model"}
+    assert models == {"model.sample.orders", "model.sample.customers"}
 
 
 def test_model_becomes_tool(artifact):
@@ -142,7 +143,7 @@ def test_cli_writes_both_outputs(tmp_path, capsys):
     assert rc == 0
     assert Artifact.from_json((tmp_path / "toolset.json").read_text()).tool("orders")
     assert [t["name"] for t in json.loads((tmp_path / "gateway-tools.json").read_text())] == [
-        "query_customers", "orders",
+        "query_customers", "orders", "average_order_value", "running_revenue", "order_count", "revenue",
     ]  # fmt: skip
     assert "unique_id" not in capsys.readouterr().out
 

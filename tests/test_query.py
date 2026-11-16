@@ -120,3 +120,19 @@ def test_lists_may_arrive_json_encoded(orders):
 def test_invalid_requests_are_rejected(orders, args, match):
     with pytest.raises(ToolInputError, match=match):
         parse_request(orders, args)
+
+
+def test_generated_sql_parses_as_redshift(orders):
+    import sqlglot
+
+    text, _ = sql(
+        orders,
+        {
+            "group_by": ["status"],
+            "aggregations": [{"function": "avg", "column": "amount"}],
+            "filters": [{"column": "ordered_at", "op": "between", "value": ["2024-01-01", "2024-02-01"]}],
+            "order_by": [{"column": "avg_amount", "direction": "desc"}],
+        },
+    )
+    parsed = sqlglot.parse_one(text, read="redshift")
+    assert isinstance(parsed, sqlglot.exp.Select) and len(parsed.expressions) == 2

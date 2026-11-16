@@ -2,3 +2,6 @@ select: "tag:exposed"
 limits:
   default_limit: 50
   max_limit: 500
+metrics:
+  select: "path:models/semantic.yml"
+  exclude: "ordering_customers"

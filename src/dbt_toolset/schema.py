@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from .artifact import Artifact, ColumnType, ModelTool
+from .artifact import Artifact, ColumnType, MetricTool, ModelTool
 
 FILTER_OPS = [
     "eq", "ne", "gt", "gte", "lt", "lte",
@@ -23,7 +23,14 @@ def filterable(tool: ModelTool) -> list[str]:
     return [c.name for c in tool.columns if c.type is not ColumnType.other]
 
 
-def tool_description(tool: ModelTool) -> str:
+def tool_description(tool: ModelTool | MetricTool) -> str:
+    if isinstance(tool, MetricTool):
+        lines = [tool.description.strip() or f"Query the {tool.metric} metric.", "", "Dimensions:"]
+        for d in tool.dimensions:
+            kind = f"time, grains: {', '.join(d.grains)}" if d.kind == "time" else (d.type.value if d.type else "categorical")
+            doc = f" - {d.description.strip()}" if d.description.strip() else ""
+            lines.append(f"- {d.name} ({kind}){doc}")
+        return "\n".join(lines)
     lines = [tool.description.strip() or f"Query the {tool.relation.identifier} table.", "", "Columns:"]
     for c in tool.columns:
         doc = f" - {c.description.strip()}" if c.description.strip() else ""
@@ -31,7 +38,66 @@ def tool_description(tool: ModelTool) -> str:
     return "\n".join(lines)
 
 
-def tool_input_schema(tool: ModelTool, flavor: Flavor = "mcp") -> dict:
+_VALUE = {
+    "description": "Comparison value. A list for in/not_in, a two-item list for between, "
+    "omitted for is_null/is_not_null. Dates and timestamps are ISO 8601 strings.",
+}
+
+
+def _metric_input_schema(tool: MetricTool) -> dict:
+    dim = {"type": "string", "enum": [d.name for d in tool.dimensions]}
+    grains = sorted({g for d in tool.dimensions for g in d.grains}, key=lambda g: _GRAIN_ORDER.index(g))
+    properties = {
+        "group_by": {
+            "type": "array",
+            "items": dim,
+            "description": f"Dimensions to break the metric down by. Omit for a single total. "
+            f"Returned columns are the dimensions then '{tool.metric}'.",
+        },
+        "time_grain": {
+            "type": "string",
+            "enum": grains,
+            "description": "Grain for time dimensions in group_by, e.g. month. Defaults to each dimension's finest grain. "
+            "Time columns are returned as <dimension>__<grain>.",
+        },
+        "filters": {
+            "type": "array",
+            "description": "Filters applied before the metric is computed, combined with AND. "
+            "Any listed dimension can be filtered, whether or not it is in group_by.",
+            "items": {
+                "type": "object",
+                "properties": {"dimension": dim, "op": {"type": "string", "enum": FILTER_OPS}, "value": _VALUE},
+                "required": ["dimension", "op"],
+            },
+        },
+        "order_by": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "description": f"'{tool.metric}' or a dimension in group_by."},
+                    "direction": {"type": "string", "enum": ["asc", "desc"]},
+                },
+                "required": ["column"],
+            },
+        },
+        "limit": {
+            "type": "integer",
+            "description": f"Maximum rows to return. Default {tool.default_limit}, maximum {tool.max_limit}.",
+        },
+    }
+    if not grains:
+        del properties["time_grain"]
+    return {"type": "object", "properties": properties}
+
+
+_GRAIN_ORDER = ["nanosecond", "microsecond", "millisecond", "second", "minute", "hour", "day", "week", "month", "quarter", "year"]
+
+
+def tool_input_schema(tool: ModelTool | MetricTool, flavor: Flavor = "mcp") -> dict:
+    if isinstance(tool, MetricTool):
+        schema = _metric_input_schema(tool)
+        return _for_gateway(schema) if flavor == "gateway" else schema
     all_cols = [c.name for c in tool.columns]
     col = {"type": "string", "enum": all_cols}
     fcol = {"type": "string", "enum": filterable(tool)}
@@ -52,11 +118,7 @@ def tool_input_schema(tool: ModelTool, flavor: Flavor = "mcp") -> dict:
                     "properties": {
                         "column": fcol,
                         "op": {"type": "string", "enum": FILTER_OPS},
-                        "value": {
-                            "description": "Comparison value. A list for in/not_in, a two-item "
-                            "list for between, omitted for is_null/is_not_null. "
-                            "Dates and timestamps are ISO 8601 strings.",
-                        },
+                        "value": _VALUE,
                     },
                     "required": ["column", "op"],
                 },

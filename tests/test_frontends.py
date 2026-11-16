@@ -62,7 +62,7 @@ def test_lambda_requires_gateway_context(toolset):
 async def test_mcp_lists_and_calls_tools(toolset):
     async with Client(create_server(toolset)) as client:
         tools = (await client.list_tools()).tools
-        assert [t.name for t in tools] == ["query_customers", "orders"]
+        assert {"query_customers", "orders", "revenue"} <= {t.name for t in tools}
         orders = next(t for t in tools if t.name == "orders")
         assert "One row per order." in orders.description
         assert "status" in orders.input_schema["properties"]["group_by"]["items"]["enum"]

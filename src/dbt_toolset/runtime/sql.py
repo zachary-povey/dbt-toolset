@@ -43,7 +43,9 @@ def _cast_type(c: Column) -> str | None:
     return None  # strings bind as-is
 
 
-class _Params:
+class Params:
+    """Collects bound values and hands out their `:pN` placeholders."""
+
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
 
@@ -55,8 +57,9 @@ class _Params:
         return exp.cast(placeholder, to, dialect=DIALECT) if to else placeholder
 
 
-def _condition(f: Filter, column: Column, params: _Params) -> exp.Expression:
-    col = _col(column.name)
+def condition(f: Filter, column: Column, params: Params, target: exp.Expression | None = None) -> exp.Expression:
+    """The predicate for one validated filter. `target` overrides what is compared (default: the column)."""
+    col = target if target is not None else _col(column.name)
     match f.op:
         case "is_null":
             return col.is_(exp.null())
@@ -89,7 +92,7 @@ def _aggregate(a: Aggregation) -> exp.Expression:
 def build_query(tool: ModelTool, req: QueryRequest, include_database: bool = False) -> BuiltQuery:
     """`req` must come from parse_request, which has already validated it against `tool`."""
     cols = {c.name: c for c in tool.columns}
-    params = _Params()
+    params = Params()
     rel = tool.relation
     table = exp.table_(
         rel.identifier, db=rel.schema_, catalog=rel.database if include_database else None, quoted=True
@@ -102,7 +105,7 @@ def build_query(tool: ModelTool, req: QueryRequest, include_database: bool = Fal
 
     query = exp.select(*projections).from_(table)
     if req.filters:
-        query = query.where(exp.and_(*(_condition(f, cols[f.column], params) for f in req.filters), wrap=False))
+        query = query.where(exp.and_(*(condition(f, cols[f.column], params) for f in req.filters), wrap=False))
     if req.group_by:
         query = query.group_by(*(_col(g) for g in req.group_by))
     for o in req.order_by:
