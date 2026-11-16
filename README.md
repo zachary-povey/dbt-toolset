@@ -242,8 +242,34 @@ generated Redshift SQL as text, and executes it for real against DuckDB (metrics
 included, using MetricFlow's DuckDB renderer). The Redshift Data API client is faked.
 
 `tests/integration/` runs the real Data API path and is skipped unless
-`DBT_TOOLSET_TEST_REDSHIFT_*` is set (see the file). Point it at Redshift, or at a
-local AWS emulator by also setting `AWS_ENDPOINT_URL`.
+`DBT_TOOLSET_TEST_REDSHIFT_*` is set (see the file). Point it at real Redshift, or at
+[AWS Emulator](https://github.com/aws/aws-emulator) running locally:
+
+```bash
+aws-emulator --telemetry off
+```
+
+Then, in another shell, set the variables from the emulator's
+[SDK guide](https://docs.aws.amazon.com/emulator/latest/userguide/point-sdk-to-emulator.html)
+(`AWS_ENDPOINT_URL`, `AWS_CA_BUNDLE` and so on), create a workgroup once, and run the suite:
+
+```bash
+aws redshift-serverless create-namespace --namespace-name dbt-toolset --db-name dev --admin-username admin --admin-user-password 'Passw0rd!x'
+```
+
+```bash
+aws redshift-serverless create-workgroup --workgroup-name dbt-toolset --namespace-name dbt-toolset
+```
+
+```bash
+DBT_TOOLSET_TEST_REDSHIFT_DATABASE=dev DBT_TOOLSET_TEST_REDSHIFT_WORKGROUP=dbt-toolset uv run pytest tests/integration
+```
+
+The emulator exercises the Data API plumbing (submit, poll, page, typed results, bound
+parameters) but its SQL engine is not Redshift. As of 1.0.385 it evaluates
+`CAST('2024-02-01' AS DATE)` as the number 2024 and rejects three-part table names, so
+one date-filter test is an expected failure there and metric tools are not covered.
+Treat a pass on the emulator as a check of the plumbing, not of the SQL.
 
 After changing the artifact models, regenerate the published schema:
 

@@ -46,17 +46,19 @@ class RedshiftDataExecutor:
         if parameters:
             request["Parameters"] = [{"name": k, "value": v} for k, v in parameters.items()]
         statement_id = self._client.execute_statement(**request)["Id"]
-        self._wait(statement_id)
+        if not self._wait(statement_id):
+            return QueryResult([], [])  # e.g. DDL: asking for its result is an error
         return self._fetch(statement_id)
 
-    def _wait(self, statement_id: str) -> None:
+    def _wait(self, statement_id: str) -> bool:
+        """Block until the statement finishes. Returns whether it produced a result set."""
         deadline = time.monotonic() + self._timeout
         delay = 0.1
         while True:
             desc = self._client.describe_statement(Id=statement_id)
             status = desc["Status"]
             if status == "FINISHED":
-                return
+                return desc.get("HasResultSet", True)
             if status in ("FAILED", "ABORTED"):
                 raise ExecutionError(desc.get("Error") or f"statement {status.lower()}")
             if time.monotonic() >= deadline:

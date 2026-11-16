@@ -8,7 +8,8 @@ from dbt_toolset.runtime.toolset import Toolset, UnknownToolError
 class FakeDataApi:
     """Stands in for the boto3 redshift-data client."""
 
-    def __init__(self, statuses=("STARTED", "FINISHED"), pages=None, error=None):
+    def __init__(self, statuses=("STARTED", "FINISHED"), pages=None, error=None, has_result_set=True):
+        self.has_result_set = has_result_set
         self.statuses = list(statuses)
         self.pages = pages or [{"ColumnMetadata": [], "Records": []}]
         self.error = error
@@ -21,12 +22,13 @@ class FakeDataApi:
 
     def describe_statement(self, Id):
         status = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
-        return {"Status": status, **({"Error": self.error} if self.error else {})}
+        return {"Status": status, "HasResultSet": self.has_result_set, **({"Error": self.error} if self.error else {})}
 
     def cancel_statement(self, Id):
         self.cancelled.append(Id)
 
     def get_statement_result(self, Id, NextToken=None):
+        assert self.has_result_set, "the Data API rejects GetStatementResult for statements without a result set"
         i = int(NextToken or 0)
         page = dict(self.pages[i])
         if i + 1 < len(self.pages):
@@ -64,6 +66,12 @@ def test_provisioned_cluster_target_and_no_parameters():
     api = FakeDataApi()
     RedshiftDataExecutor("db", cluster_identifier="c", db_user="u", client=api).execute("SELECT 1", {})
     assert api.executed == [{"Sql": "SELECT 1", "Database": "db", "ClusterIdentifier": "c", "DbUser": "u"}]
+
+
+def test_statement_without_result_set_returns_no_rows():
+    api = FakeDataApi(has_result_set=False)
+    result = RedshiftDataExecutor("db", workgroup_name="wg", client=api).execute("CREATE SCHEMA s", {})
+    assert (result.columns, result.rows) == ([], [])
 
 
 def test_failed_statement_raises_warehouse_error():

@@ -7,8 +7,10 @@ local AWS emulator by also setting AWS_ENDPOINT_URL (boto3 reads it natively):
     DBT_TOOLSET_TEST_REDSHIFT_WORKGROUP=...   (or DBT_TOOLSET_TEST_REDSHIFT_CLUSTER=...)
     DBT_TOOLSET_TEST_REDSHIFT_SECRET_ARN=...  (optional)   DBT_TOOLSET_TEST_REDSHIFT_DB_USER=... (optional)
 
-It creates and drops its own schema. NOTE: written without access to either a
-Redshift instance or the emulator, so it has not yet been run.
+It creates and drops its own schema. Passes against AWS Emulator 1.0.385; not yet
+run against real Redshift. The emulator's SQL engine is not Redshift: it mis-evaluates
+date casts (see the xfail below) and does not parse three-part table names, which is
+why metric tools are not covered here.
 """
 
 import os
@@ -23,6 +25,7 @@ ENV = "DBT_TOOLSET_TEST_REDSHIFT_"
 DATABASE = os.environ.get(ENV + "DATABASE")
 WORKGROUP = os.environ.get(ENV + "WORKGROUP")
 CLUSTER = os.environ.get(ENV + "CLUSTER")
+EMULATED = bool(os.environ.get("AWS_ENDPOINT_URL"))
 
 pytestmark = pytest.mark.skipif(
     not (DATABASE and (WORKGROUP or CLUSTER)), reason="no Redshift Data API target configured"
@@ -58,6 +61,7 @@ def toolset(artifact, executor):
         )
         patched = artifact.model_copy(deep=True)
         patched.tool("orders").relation.schema_ = schema
+        patched.tool("orders").relation.database = DATABASE
         yield Toolset(patched, executor, connection_database=DATABASE)
     finally:
         executor.execute(f'DROP SCHEMA "{schema}" CASCADE', {})
@@ -70,14 +74,36 @@ def test_select_with_typed_filters(toolset):
             "columns": ["order_id", "amount", "ordered_at"],
             "filters": [
                 {"column": "status", "op": "in", "value": ["shipped", "it's"]},
-                {"column": "ordered_at", "op": "gte", "value": "2024-02-01"},
+                {"column": "customer_id", "op": "gt", "value": 10},
+                {"column": "amount", "op": "lt", "value": 100.5},
             ],
             "order_by": [{"column": "order_id"}],
         },
     )
     assert out["columns"] == ["order_id", "amount", "ordered_at"]
+    assert [r[0] for r in out["rows"]] == [3]
+
+
+def test_null_filter_returns_nulls(toolset):
+    out = toolset.call("orders", {"columns": ["order_id", "amount"], "filters": [{"column": "amount", "op": "is_null"}]})
+    assert out["rows"] == [[4, None]]
+
+
+@pytest.mark.xfail(
+    EMULATED,
+    reason="AWS Emulator 1.0.385 evaluates CAST('2024-02-01' AS DATE) as the number 2024, so date comparisons misfire",
+    strict=True,
+)
+def test_date_filter(toolset):
+    out = toolset.call(
+        "orders",
+        {
+            "columns": ["order_id"],
+            "filters": [{"column": "ordered_at", "op": "gte", "value": "2024-02-01"}],
+            "order_by": [{"column": "order_id"}],
+        },
+    )
     assert [r[0] for r in out["rows"]] == [3, 4]
-    assert out["rows"][1][1] is None
 
 
 def test_group_by(toolset):
