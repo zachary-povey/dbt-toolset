@@ -1,0 +1,4 @@
+select: "tag:exposed"
+limits:
+  default_limit: 50
+  max_limit: 500

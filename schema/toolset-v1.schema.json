@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "Column": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ColumnType"
+        },
+        "data_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Warehouse type as reported by dbt, if known.",
+          "title": "Data Type"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "Column",
+      "type": "object"
+    },
+    "ColumnType": {
+      "description": "Logical type, used to validate filter values and pick legal aggregations.",
+      "enum": [
+        "string",
+        "integer",
+        "number",
+        "boolean",
+        "date",
+        "timestamp",
+        "other"
+      ],
+      "title": "ColumnType",
+      "type": "string"
+    },
+    "ModelTool": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "model",
+          "default": "model",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "unique_id": {
+          "description": "dbt unique_id of the source model.",
+          "title": "Unique Id",
+          "type": "string"
+        },
+        "relation": {
+          "$ref": "#/$defs/Relation"
+        },
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/Column"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "default_limit": {
+          "exclusiveMinimum": 0,
+          "title": "Default Limit",
+          "type": "integer"
+        },
+        "max_limit": {
+          "exclusiveMinimum": 0,
+          "title": "Max Limit",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "unique_id",
+        "relation",
+        "columns",
+        "default_limit",
+        "max_limit"
+      ],
+      "title": "ModelTool",
+      "type": "object"
+    },
+    "Relation": {
+      "additionalProperties": false,
+      "properties": {
+        "database": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database"
+        },
+        "schema": {
+          "title": "Schema",
+          "type": "string"
+        },
+        "identifier": {
+          "title": "Identifier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "identifier"
+      ],
+      "title": "Relation",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "project_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Name"
+        },
+        "dbt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dbt Version"
+        },
+        "adapter_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adapter Type"
+        }
+      },
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/Source"
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/ModelTool"
+      },
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "generated_at",
+    "source",
+    "tools"
+  ],
+  "title": "Artifact",
+  "type": "object"
+}

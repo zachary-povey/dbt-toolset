@@ -1,0 +1,39 @@
+models:
+  - name: orders
+    description: One row per order.
+    config:
+      tags: [exposed]
+    columns:
+      - name: order_id
+        description: Primary key.
+        data_type: integer
+      - name: customer_id
+        data_type: integer
+      - name: status
+        description: placed, shipped or returned.
+        data_type: varchar(16)
+      - name: amount
+        description: Order value in GBP.
+        data_type: numeric(12,2)
+      - name: ordered_at
+        data_type: date
+      - name: internal_note
+        data_type: varchar
+        meta:
+          dbt_toolset:
+            hidden: true
+  - name: customers
+    description: One row per customer.
+    config:
+      tags: [exposed]
+      alias: dim_customers
+      meta:
+        dbt_toolset:
+          tool_name: query_customers
+    columns:
+      - name: customer_id
+        data_type: integer
+      - name: order_count
+        data_type: bigint
+  - name: secret
+    description: Not tagged, so never exposed.

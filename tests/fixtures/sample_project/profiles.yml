@@ -1,0 +1,12 @@
+# Dummy profile: compiling only parses the project and never connects.
+sample:
+  target: dev
+  outputs:
+    dev:
+      type: redshift
+      host: localhost
+      port: 5439
+      user: nobody
+      password: nothing
+      dbname: analytics
+      schema: marts
