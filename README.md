@@ -23,21 +23,21 @@ It is not on PyPI yet, so install from this repository. With
 [uv](https://docs.astral.sh/uv/) there is no virtual environment to manage:
 
 ```bash
-uv tool install --with dbt-redshift "dbt-toolset[compile,metrics,mcp] @ git+https://github.com/zachary-povey/dbt-mcp"
+uv tool install "dbt-toolset[compile,metrics,mcp] @ git+https://github.com/zachary-povey/dbt-mcp"
 ```
 
-That puts `dbt-toolset` on your `PATH` in its own isolated environment. `--with` adds
-your dbt adapter, which the compiler needs alongside dbt. Or run it without installing:
+That puts `dbt-toolset` on your `PATH` in its own isolated environment. Or run it
+without installing:
 
 ```bash
-uvx --with dbt-redshift --from "dbt-toolset[compile,metrics] @ git+https://github.com/zachary-povey/dbt-mcp" dbt-toolset compile --help
+uvx --from "dbt-toolset[compile,metrics] @ git+https://github.com/zachary-povey/dbt-mcp" dbt-toolset compile --help
 ```
 
 Pick the extras you need:
 
 | Extra | For |
 | --- | --- |
-| `compile` | `dbt-toolset compile` (brings dbt-core; add your adapter with `--with`). |
+| `compile` | `dbt-toolset compile`. Brings dbt-core and the dbt-redshift adapter. |
 | `metrics` | Semantic-layer metric tools, at compile time and at runtime. |
 | `mcp` | `dbt-toolset serve` (includes `runtime`). |
 | `runtime` | Serving from an artifact as a library, e.g. in the Lambda image. No dbt. |
