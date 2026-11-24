@@ -144,6 +144,7 @@ def test_cli_writes_both_outputs(tmp_path, capsys):
     assert Artifact.from_json((tmp_path / "toolset.json").read_text()).tool("orders")
     assert [t["name"] for t in json.loads((tmp_path / "gateway-tools.json").read_text())] == [
         "query_customers", "orders", "average_order_value", "running_revenue", "order_count", "revenue",
+        "revenue_growth_mom", "revenue_last_7_days",
     ]  # fmt: skip
     assert "unique_id" not in capsys.readouterr().out
 

@@ -84,6 +84,10 @@ def build_metric_query(tool: MetricTool, arguments: dict | None, engine: Any) ->
             grouped[name] = name
     if req.time_grain and not any(dims[n].kind == "time" for n in req.group_by):
         raise ToolInputError("time_grain needs a time dimension in group_by")
+    if tool.requires_metric_time and "metric_time" not in req.group_by:
+        raise ToolInputError(
+            f"{tool.metric} is a running total or period comparison: group_by must include metric_time"
+        )
 
     params = Params()
     where: list[str] = []

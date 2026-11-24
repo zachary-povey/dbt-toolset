@@ -137,6 +137,12 @@
           "title": "Dimensions",
           "type": "array"
         },
+        "requires_metric_time": {
+          "default": false,
+          "description": "True when every query must group by metric_time: cumulative metrics with a window or grain_to_date, and metrics built on a time offset (e.g. month-on-month).",
+          "title": "Requires Metric Time",
+          "type": "boolean"
+        },
         "default_limit": {
           "exclusiveMinimum": 0,
           "title": "Default Limit",

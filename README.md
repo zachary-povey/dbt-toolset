@@ -162,6 +162,11 @@ Things to know:
   data), because MetricFlow needs it to plan joins. Only selected metrics become tools.
 - Each metric is test-compiled at build time, so a metric MetricFlow cannot render
   fails the compile rather than the agent's first call.
+- Some metrics only make sense over time: cumulative metrics with a `window` or
+  `grain_to_date`, and metrics using an `offset_window` / `offset_to_grain` (e.g.
+  month-on-month). Their tools require `metric_time` in `group_by`; the tool
+  description and input schema say so, and a call without it is rejected. Excluding
+  `metric_time` from such a metric's dimensions fails the compile.
 - Entities (join keys) are not offered as group-bys.
 
 ## Runtime

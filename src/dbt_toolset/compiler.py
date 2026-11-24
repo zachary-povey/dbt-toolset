@@ -13,6 +13,7 @@ import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .artifact import Artifact, Column, ColumnType, Dimension, MetricTool, ModelTool, Relation, Source
 from .config import CompileConfig, Selection
@@ -144,12 +145,9 @@ def _metric_tools(
         if unknown:
             raise CompileError(f"{uid}: meta.{META_KEY}.dimensions lists {sorted(unknown)}, not available for this metric")
 
-        try:  # fail the build, not the first agent call, if the metric cannot be rendered
-            from metricflow.engine.metricflow_engine import MetricFlowQueryRequest
-
-            engine.explain(MetricFlowQueryRequest.create(metric_names=[metric["name"]]))
-        except Exception as e:
-            raise CompileError(f"{uid}: MetricFlow cannot compile this metric: {e}") from e
+        requires_metric_time = _test_compile(engine, uid, metric["name"])
+        if requires_metric_time and "metric_time" not in {d.name for d in dimensions}:
+            raise CompileError(f"{uid}: this metric can only be queried by metric_time, but meta.{META_KEY} excludes it")
 
         tools.append(
             MetricTool(
@@ -158,11 +156,37 @@ def _metric_tools(
                 unique_id=uid,
                 metric=metric["name"],
                 dimensions=dimensions,
+                requires_metric_time=requires_metric_time,
                 default_limit=config.limits.default_limit,
                 max_limit=config.limits.max_limit,
             )
         )
     return tools
+
+
+def _test_compile(engine: Any, uid: str, metric_name: str) -> bool:
+    """Fail the build, not the first agent call, if MetricFlow cannot render the metric.
+
+    Returns whether the metric needs metric_time in every query. MetricFlow refuses to
+    render some metrics without it (cumulative metrics with a window or grain_to_date,
+    metrics built on a time offset), so a metric that only renders when grouped by
+    metric_time is recorded as requiring it rather than rejected.
+    """
+    try:
+        _explain(engine, metric_name)
+        return False
+    except Exception as ungrouped_error:
+        try:
+            _explain(engine, metric_name, group_by=["metric_time"])
+        except Exception:
+            raise CompileError(f"{uid}: MetricFlow cannot compile this metric: {ungrouped_error}") from ungrouped_error
+        return True
+
+
+def _explain(engine: Any, metric_name: str, group_by: list[str] | None = None) -> None:
+    from metricflow.engine.metricflow_engine import MetricFlowQueryRequest
+
+    engine.explain(MetricFlowQueryRequest.create(metric_names=[metric_name], group_by_names=group_by))
 
 
 def build_artifact(

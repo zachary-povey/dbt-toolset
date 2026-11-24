@@ -77,6 +77,11 @@ class MetricTool(_Strict):
     unique_id: str = Field(description="dbt unique_id of the source metric.")
     metric: str = Field(pattern=r"^[A-Za-z0-9_]+$", description="Metric name in the semantic manifest.")
     dimensions: list[Dimension]
+    requires_metric_time: bool = Field(
+        False,
+        description="True when every query must group by metric_time: cumulative metrics with a window or "
+        "grain_to_date, and metrics built on a time offset (e.g. month-on-month).",
+    )
     default_limit: int = Field(gt=0)
     max_limit: int = Field(gt=0)
 

@@ -4,11 +4,13 @@ from decimal import Decimal
 import duckdb
 import pytest
 
+from dbt_toolset.compiler import CompileError, _metric_tools
+from dbt_toolset.config import CompileConfig
 from dbt_toolset.metricflow_engine import build_engine
 from dbt_toolset.runtime.metrics import build_metric_query
 from dbt_toolset.runtime.query import ToolInputError
 from dbt_toolset.runtime.toolset import Toolset
-from dbt_toolset.schema import tool_definitions, tool_input_schema
+from dbt_toolset.schema import tool_definitions, tool_description, tool_input_schema
 from test_execution import DuckDbExecutor
 
 
@@ -32,7 +34,47 @@ def test_selected_metrics_become_tools(artifact):
         "order_count": "order_count",
         "average_order_value": "average_order_value",
         "running_revenue": "cumulative_revenue",  # renamed via meta
+        "revenue_last_7_days": "revenue_last_7_days",
+        "revenue_growth_mom": "revenue_growth_mom",
     }  # ordering_customers is excluded by the selection
+
+
+@pytest.mark.parametrize(
+    "tool, required",
+    [
+        ("revenue", False),
+        ("average_order_value", False),
+        ("running_revenue", False),  # all-time cumulative: a single total is fine
+        ("revenue_last_7_days", True),  # windowed cumulative
+        ("revenue_growth_mom", True),  # time offset
+    ],
+)
+def test_metrics_needing_metric_time_are_flagged(artifact, tool, required):
+    assert artifact.tool(tool).requires_metric_time is required
+
+
+def test_metric_needing_metric_time_cannot_exclude_it(artifact):
+    uid = "metric.sample.revenue_last_7_days"
+    manifest = {
+        "metrics": {
+            uid: {
+                "unique_id": uid,
+                "name": "revenue_last_7_days",
+                "config": {"meta": {"dbt_toolset": {"exclude_dimensions": ["metric_time"]}}},
+            }
+        }
+    }
+    with pytest.raises(CompileError, match="can only be queried by metric_time"):
+        _metric_tools(manifest, artifact.semantic_manifest, [uid], CompileConfig(select="x"), {})
+
+
+def test_metric_needing_metric_time_says_so_in_its_schema(artifact):
+    tool = artifact.tool("revenue_last_7_days")
+    schema = tool_input_schema(tool)
+    assert schema["required"] == ["group_by"]
+    assert "Must include metric_time" in schema["properties"]["group_by"]["description"]
+    assert "group_by must include metric_time" in tool_description(tool)
+    assert "required" not in tool_input_schema(artifact.tool("revenue"))
 
 
 def test_metric_dimensions_come_from_the_semantic_layer(revenue):
@@ -113,6 +155,13 @@ def test_invalid_metric_requests(revenue, redshift, args, match):
 def test_restricted_dimension_cannot_be_used(artifact, redshift):
     with pytest.raises(ToolInputError, match="unknown dimension 'customer__region'"):
         build_metric_query(artifact.tool("running_revenue"), {"group_by": ["customer__region"]}, redshift)
+
+
+@pytest.mark.parametrize("tool", ["revenue_last_7_days", "revenue_growth_mom"])
+@pytest.mark.parametrize("args", [{}, {"group_by": ["order__status"]}, {"group_by": ["order__ordered_at"]}])
+def test_metric_needing_metric_time_rejects_queries_without_it(artifact, redshift, tool, args):
+    with pytest.raises(ToolInputError, match="group_by must include metric_time"):
+        build_metric_query(artifact.tool(tool), args, redshift)
 
 
 # --- execution (DuckDB) ----------------------------------------------------
@@ -199,6 +248,28 @@ def test_cumulative_metric(toolset):
         },
     )
     assert [r[1] for r in out["rows"]] == [Decimal("9.50"), Decimal("29.50"), Decimal("38.75")]
+
+
+def test_windowed_cumulative_metric(toolset):
+    out = toolset.call(
+        "revenue_last_7_days",
+        {
+            "group_by": ["metric_time"],
+            "filters": [{"dimension": "metric_time", "op": "in", "value": ["2024-01-05", "2024-01-11", "2024-01-20"]}],
+            "order_by": [{"column": "metric_time"}],
+        },
+    )
+    # the 2024-01-05 order is inside the 7-day window on the 11th, outside it on the 20th
+    assert [r[1] for r in out["rows"]] == [Decimal("9.50"), Decimal("9.50"), Decimal("20.00")]
+
+
+def test_offset_metric(toolset):
+    out = toolset.call(
+        "revenue_growth_mom",
+        {"group_by": ["metric_time"], "time_grain": "month", "order_by": [{"column": "metric_time"}]},
+    )
+    by_month = {_d(r[0]): r[1] for r in out["rows"]}
+    assert by_month[date(2024, 2, 1)] == Decimal("9.25") - Decimal("29.50")
 
 
 def test_metric_limit_and_truncation(toolset):

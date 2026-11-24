@@ -25,7 +25,10 @@ def filterable(tool: ModelTool) -> list[str]:
 
 def tool_description(tool: ModelTool | MetricTool) -> str:
     if isinstance(tool, MetricTool):
-        lines = [tool.description.strip() or f"Query the {tool.metric} metric.", "", "Dimensions:"]
+        lines = [tool.description.strip() or f"Query the {tool.metric} metric."]
+        if tool.requires_metric_time:
+            lines.append(_REQUIRES_METRIC_TIME)
+        lines += ["", "Dimensions:"]
         for d in tool.dimensions:
             kind = f"time, grains: {', '.join(d.grains)}" if d.kind == "time" else (d.type.value if d.type else "categorical")
             doc = f" - {d.description.strip()}" if d.description.strip() else ""
@@ -43,6 +46,15 @@ _VALUE = {
     "omitted for is_null/is_not_null. Dates and timestamps are ISO 8601 strings.",
 }
 
+_REQUIRES_METRIC_TIME = "This metric is only defined over time: group_by must include metric_time."
+
+
+def _group_by_description(tool: MetricTool) -> str:
+    returned = f"Returned columns are the dimensions then '{tool.metric}'."
+    if tool.requires_metric_time:
+        return f"Dimensions to break the metric down by. Must include metric_time. {returned}"
+    return f"Dimensions to break the metric down by. Omit for a single total. {returned}"
+
 
 def _metric_input_schema(tool: MetricTool) -> dict:
     dim = {"type": "string", "enum": [d.name for d in tool.dimensions]}
@@ -51,8 +63,7 @@ def _metric_input_schema(tool: MetricTool) -> dict:
         "group_by": {
             "type": "array",
             "items": dim,
-            "description": f"Dimensions to break the metric down by. Omit for a single total. "
-            f"Returned columns are the dimensions then '{tool.metric}'.",
+            "description": _group_by_description(tool),
         },
         "time_grain": {
             "type": "string",
@@ -88,7 +99,10 @@ def _metric_input_schema(tool: MetricTool) -> dict:
     }
     if not grains:
         del properties["time_grain"]
-    return {"type": "object", "properties": properties}
+    schema = {"type": "object", "properties": properties}
+    if tool.requires_metric_time:
+        schema["required"] = ["group_by"]
+    return schema
 
 
 _GRAIN_ORDER = ["nanosecond", "microsecond", "millisecond", "second", "minute", "hour", "day", "week", "month", "quarter", "year"]
