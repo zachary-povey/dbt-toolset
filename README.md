@@ -23,14 +23,14 @@ It is not on PyPI yet, so install from this repository. With
 [uv](https://docs.astral.sh/uv/) there is no virtual environment to manage:
 
 ```bash
-uv tool install "dbt-toolset[compile,metrics,mcp] @ git+https://github.com/zachary-povey/dbt-mcp"
+uv tool install "dbt-toolset[compile,metrics,mcp] @ git+https://github.com/zachary-povey/dbt-toolset"
 ```
 
 That puts `dbt-toolset` on your `PATH` in its own isolated environment. Or run it
 without installing:
 
 ```bash
-uvx --from "dbt-toolset[compile,metrics] @ git+https://github.com/zachary-povey/dbt-mcp" dbt-toolset compile --help
+uvx --from "dbt-toolset[compile,metrics] @ git+https://github.com/zachary-povey/dbt-toolset" dbt-toolset compile --help
 ```
 
 Pick the extras you need:
